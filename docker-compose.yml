@@ -1,0 +1,81 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-datrovo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-datrovo}
+      POSTGRES_DB: ${POSTGRES_DB:-datrovo}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-datrovo} -d ${POSTGRES_DB:-datrovo}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-datrovo}:${POSTGRES_PASSWORD:-datrovo}@postgres:5432/${POSTGRES_DB:-datrovo}
+      CRM_DISPATCH_TIMEOUT_SECONDS: ${CRM_DISPATCH_TIMEOUT_SECONDS:-5.0}
+      LEAD_DEDUP_WINDOW_DAYS: ${LEAD_DEDUP_WINDOW_DAYS:-30}
+      REPRISE_DEFAULT_DEALER_ID: ${REPRISE_DEFAULT_DEALER_ID:-1}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/docs')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      # Nom de service Docker Compose ("backend"), pas localhost : les
+      # conteneurs se joignent par leur nom sur le réseau interne compose.
+      API_BASE_URL: http://backend:8000/api/v1
+      SITE_URL: ${SITE_URL:-http://localhost:3000}
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+
+volumes:
+  postgres_data:
+
+# --- Synchronisation du stock XML (CRON) ---
+# Pas de 4e conteneur dédié : l'image "backend" contient déjà le parseur
+# (app/services/xml_parser.py). Un planificateur externe (crontab du host,
+# CronJob Kubernetes, scheduler cloud) déclenche un run ponctuel dans le
+# conteneur déjà démarré, par exemple :
+#
+#   */15 * * * *  docker compose -f /path/to/docker-compose.yml exec -T backend \
+#                  python -m app.services.xml_parser
+#
+# (sans --dealer-id/--feed-url : synchronise tous les dealers ayant un
+# stock_feed_url configuré — voir sync_all_dealers() dans xml_parser.py).
+
+# --- Sniping B2C (CRON) ---
+# Même principe : app/tasks/sniper.py tourne dans le conteneur backend déjà
+# démarré (qui embarque Chromium via playwright install --with-deps, voir
+# Dockerfile), pas de conteneur dédié. --search-url est OBLIGATOIRE et doit
+# pointer vers une page de résultats réelle sur la plateforme ciblée (les
+# sélecteurs CSS du script sont des exemples à adapter avant toute
+# exécution en production — voir le docstring de sniper.py).
+#
+#   0 */2 * * *   docker compose -f /path/to/docker-compose.yml exec -T backend \
+#                  python -m app.tasks.sniper --search-url "https://..." --max-results 30

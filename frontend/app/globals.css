@@ -1,0 +1,111 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* Pont entre nos variables sémantiques (:root / .dark ci-dessous) et les
+   tokens de thème Tailwind v4 (--color-*, --radius-*) qui alimentent les
+   utilitaires bg-background, border-border, rounded-md, etc. Sans ce bloc,
+   ces classes n'existent pas pour le compilateur v4. */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+@layer base {
+  :root {
+    /* Palette Datrovo "AutoConnect" : fond blanc/ardoise, navbar/CTA secondaire
+       noirs, CTA principal et accents en bleu électrique. */
+    --background: var(--color-slate-50);
+    --foreground: var(--color-slate-900);
+
+    --card: var(--color-white);
+    --card-foreground: var(--color-slate-900);
+    --popover: var(--color-white);
+    --popover-foreground: var(--color-slate-900);
+
+    --primary: var(--color-blue-600);
+    --primary-foreground: var(--color-white);
+
+    --secondary: var(--color-slate-900);
+    --secondary-foreground: var(--color-white);
+
+    --muted: var(--color-slate-100);
+    --muted-foreground: var(--color-slate-500);
+
+    --accent: var(--color-blue-50);
+    --accent-foreground: var(--color-blue-900);
+
+    --destructive: var(--color-red-600);
+    --destructive-foreground: var(--color-white);
+
+    --border: var(--color-slate-200);
+    --input: var(--color-slate-200);
+    --ring: var(--color-blue-600);
+
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    --background: var(--color-slate-950);
+    --foreground: var(--color-slate-50);
+
+    --card: var(--color-slate-900);
+    --card-foreground: var(--color-slate-50);
+    --popover: var(--color-slate-900);
+    --popover-foreground: var(--color-slate-50);
+
+    --primary: var(--color-blue-600);
+    --primary-foreground: var(--color-slate-950);
+
+    --secondary: var(--color-slate-800);
+    --secondary-foreground: var(--color-slate-50);
+
+    --muted: var(--color-slate-800);
+    --muted-foreground: var(--color-slate-400);
+
+    --accent: var(--color-blue-950);
+    --accent-foreground: var(--color-blue-50);
+
+    --destructive: var(--color-red-500);
+    --destructive-foreground: var(--color-slate-50);
+
+    --border: var(--color-slate-800);
+    --input: var(--color-slate-800);
+    --ring: var(--color-blue-600);
+  }
+
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}

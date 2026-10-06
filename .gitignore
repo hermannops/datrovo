@@ -1,0 +1,18 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Env files (jamais les vrais, seulement les .example sont versionnés)
+.env
+.env.*
+!.env.example
+
+# OS / éditeur
+.DS_Store
+*.swp
+
+# Logs locaux
+*.log
