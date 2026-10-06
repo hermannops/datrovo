@@ -1,6 +1,7 @@
 services:
-  postgres:
-    image: postgres:16-alpine
+  db:
+    image: postgres:15-alpine
+    container_name: datrovo-db
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-datrovo}
@@ -17,15 +18,19 @@ services:
       - "${POSTGRES_PORT:-5432}:5432"
 
   backend:
+    image: datrovo-backend
+    container_name: datrovo-backend
     build:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
     depends_on:
-      postgres:
+      db:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-datrovo}:${POSTGRES_PASSWORD:-datrovo}@postgres:5432/${POSTGRES_DB:-datrovo}
+      # "db" = nom du service ci-dessus, résolu par le DNS interne de Compose
+      # — jamais exposé, jamais traversé par Tailscale.
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-datrovo}:${POSTGRES_PASSWORD:-datrovo}@db:5432/${POSTGRES_DB:-datrovo}
       CRM_DISPATCH_TIMEOUT_SECONDS: ${CRM_DISPATCH_TIMEOUT_SECONDS:-5.0}
       LEAD_DEDUP_WINDOW_DAYS: ${LEAD_DEDUP_WINDOW_DAYS:-30}
       REPRISE_DEFAULT_DEALER_ID: ${REPRISE_DEFAULT_DEALER_ID:-1}
@@ -39,6 +44,8 @@ services:
       - "${BACKEND_PORT:-8000}:8000"
 
   frontend:
+    image: datrovo-frontend
+    container_name: datrovo-frontend
     build:
       context: ./frontend
       dockerfile: Dockerfile
@@ -47,10 +54,23 @@ services:
       backend:
         condition: service_healthy
     environment:
-      # Nom de service Docker Compose ("backend"), pas localhost : les
-      # conteneurs se joignent par leur nom sur le réseau interne compose.
+      # IMPORTANT : "API_BASE_URL" (PAS "NEXT_PUBLIC_API_URL") — le backend
+      # n'est JAMAIS appelé depuis le navigateur. Tous les appels partent du
+      # serveur Next.js (Server Components / Server Actions / le seul Route
+      # Handler proxy, pour /favoris). Préfixer cette variable NEXT_PUBLIC_
+      # l'inlinerait dans le bundle client et exposerait l'origine interne du
+      # backend pour zéro bénéfice fonctionnel — ne pas le faire.
+      # "backend" = nom du SERVICE ci-dessus (clé YAML), pas container_name :
+      # c'est la résolution DNS garantie par Compose, contrairement à
+      # container_name (alias additionnel, non documenté comme systématique
+      # sur toutes les versions/moteurs). Jamais l'IP ou le nom Tailscale ici
+      # : ce trafic ne quitte jamais le réseau docker du host.
       API_BASE_URL: http://backend:8000/api/v1
-      SITE_URL: ${SITE_URL:-http://localhost:3000}
+      # Seule variable qui doit réellement refléter l'adresse Tailscale :
+      # utilisée uniquement pour générer des URLs absolues côté serveur
+      # (canonical, JSON-LD) dans le HTML rendu — jamais lue depuis le
+      # navigateur. Mettre l'IP Tailscale du host ou son nom MagicDNS.
+      SITE_URL: ${SITE_URL:-http://100.x.x.x:3000}
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
 
@@ -58,24 +78,23 @@ volumes:
   postgres_data:
 
 # --- Synchronisation du stock XML (CRON) ---
-# Pas de 4e conteneur dédié : l'image "backend" contient déjà le parseur
-# (app/services/xml_parser.py). Un planificateur externe (crontab du host,
-# CronJob Kubernetes, scheduler cloud) déclenche un run ponctuel dans le
-# conteneur déjà démarré, par exemple :
+# Pas de 4e conteneur dédié : l'image "datrovo-backend" contient déjà le
+# parseur (app/services/xml_parser.py). Un planificateur externe (crontab du
+# host Proxmox/LXC, CronJob, scheduler cloud) déclenche un run ponctuel dans
+# le conteneur déjà démarré, par exemple :
 #
-#   */15 * * * *  docker compose -f /path/to/docker-compose.yml exec -T backend \
-#                  python -m app.services.xml_parser
+#   */15 * * * *  docker exec datrovo-backend python -m app.services.xml_parser
 #
 # (sans --dealer-id/--feed-url : synchronise tous les dealers ayant un
 # stock_feed_url configuré — voir sync_all_dealers() dans xml_parser.py).
 
 # --- Sniping B2C (CRON) ---
-# Même principe : app/tasks/sniper.py tourne dans le conteneur backend déjà
-# démarré (qui embarque Chromium via playwright install --with-deps, voir
-# Dockerfile), pas de conteneur dédié. --search-url est OBLIGATOIRE et doit
-# pointer vers une page de résultats réelle sur la plateforme ciblée (les
-# sélecteurs CSS du script sont des exemples à adapter avant toute
-# exécution en production — voir le docstring de sniper.py).
+# Même principe : app/tasks/sniper.py tourne dans le conteneur déjà démarré
+# (qui embarque Chromium via playwright install --with-deps, voir
+# Dockerfile). --search-url est OBLIGATOIRE et doit pointer vers une page de
+# résultats réelle sur la plateforme ciblée (les sélecteurs CSS du script
+# sont des exemples à adapter avant toute exécution en production — voir le
+# docstring de sniper.py).
 #
-#   0 */2 * * *   docker compose -f /path/to/docker-compose.yml exec -T backend \
-#                  python -m app.tasks.sniper --search-url "https://..." --max-results 30
+#   0 */2 * * *   docker exec datrovo-backend python -m app.tasks.sniper \
+#                  --search-url "https://..." --max-results 30
