@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1
-
 # --- builder : compile les deps qui ont besoin de headers C (lxml, asyncpg) ---
 # bookworm figé explicitement : playwright==1.49.1 ne connaît pas encore les
 # paquets apt de Debian trixie (vers laquelle le tag flottant "slim" a glissé),
