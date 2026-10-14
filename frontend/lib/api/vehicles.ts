@@ -31,7 +31,19 @@ function buildQuery(filters: VehicleFilters): string {
 
 /** Catalogue filtré — utilisé par les pages SEO programmatiques (ISR 5 min). */
 export async function listVehicles(filters: VehicleFilters = {}): Promise<Vehicle[]> {
-  return apiFetch<Vehicle[]>(`/vehicles${buildQuery(filters)}`, { revalidate: 300 });
+  try {
+    return await apiFetch<Vehicle[]>(`/vehicles${buildQuery(filters)}`, { revalidate: 300 });
+  } catch (error) {
+    // Au `docker build`, le backend n'est pas encore démarré (conteneur séparé) :
+    // Next tente quand même un prerender statique de "/" à ce moment-là. On
+    // retombe sur une liste vide (déjà géré par l'UI) plutôt que de faire
+    // échouer le build ; l'ISR régénère la vraie page dans les 5 min suivant
+    // le démarrage réel du backend en prod.
+    if (process.env.NEXT_PHASE === "phase-production-build") {
+      return [];
+    }
+    throw error;
+  }
 }
 
 /** Fiche véhicule — ISR courte (1 min) car prix/statut peuvent changer vite. */
