@@ -1,7 +1,10 @@
 # syntax=docker/dockerfile:1
 
 # --- builder : compile les deps qui ont besoin de headers C (lxml, asyncpg) ---
-FROM python:3.11-slim AS builder
+# bookworm figé explicitement : playwright==1.49.1 ne connaît pas encore les
+# paquets apt de Debian trixie (vers laquelle le tag flottant "slim" a glissé),
+# ce qui faisait échouer `playwright install --with-deps` (ttf-unifont introuvable).
+FROM python:3.11-slim-bookworm AS builder
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -12,7 +15,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
 # --- runtime : image finale, juste les libs partagées nécessaires à l'exécution ---
-FROM python:3.11-slim AS runtime
+FROM python:3.11-slim-bookworm AS runtime
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
